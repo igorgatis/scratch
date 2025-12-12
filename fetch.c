@@ -11,6 +11,7 @@
 #include "net/http/http.h"
 
 #define MAX_HEADER_SIZE 8192
+#define MAX_REDIRECTS 5
 
 void die(const char *msg) {
     perror(msg);
@@ -23,162 +24,217 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    const char *url_str = argv[1];
-    struct Url url = {0};
-    char *url_mem = ParseUrl(url_str, -1, &url, kUrlPlus);
-    if (!url_mem) {
-        fprintf(stderr, "Failed to parse URL\n");
-        return 1;
-    }
+    char *current_url_str = strdup(argv[1]);
+    int redirects = 0;
 
-    if (!url.scheme.p || !url.host.p) {
-        fprintf(stderr, "Invalid URL: missing scheme or host\n");
-        free(url_mem);
-        return 1;
-    }
+    while (redirects < MAX_REDIRECTS) {
+        struct Url url = {0};
+        char *url_mem = ParseUrl(current_url_str, -1, &url, kUrlPlus);
+        if (!url_mem) {
+            fprintf(stderr, "Failed to parse URL: %s\n", current_url_str);
+            free(current_url_str);
+            return 1;
+        }
 
-    char scheme[32] = {0};
-    if (url.scheme.n < sizeof(scheme)) {
-        memcpy(scheme, url.scheme.p, url.scheme.n);
-    }
+        // Validation removed as requested.
 
-    char host[256] = {0};
-    if (url.host.n < sizeof(host)) {
-        memcpy(host, url.host.p, url.host.n);
-    }
+        char scheme[32] = {0};
+        if (url.scheme.p && url.scheme.n < sizeof(scheme)) {
+            memcpy(scheme, url.scheme.p, url.scheme.n);
+        }
 
-    char path[1024] = "/";
-    if (url.path.p && url.path.n > 0) {
-        if (url.path.n < sizeof(path)) {
-            memcpy(path, url.path.p, url.path.n);
-            path[url.path.n] = '\0';
-        } else {
-            fprintf(stderr, "Path too long\n");
+        char host[256] = {0};
+        if (url.host.p && url.host.n < sizeof(host)) {
+            memcpy(host, url.host.p, url.host.n);
+        }
+
+        char path[2048] = "/";
+        if (url.path.p && url.path.n > 0) {
+            size_t path_len = url.path.n;
+            if (path_len >= sizeof(path)) path_len = sizeof(path) - 1;
+            memcpy(path, url.path.p, path_len);
+            path[path_len] = '\0';
+        }
+
+        int port = 80;
+        if (strcasecmp(scheme, "https") == 0) {
+            port = 443;
+        }
+
+        if (url.port.p && url.port.n > 0) {
+            char port_str[16] = {0};
+            if (url.port.n < sizeof(port_str)) {
+                memcpy(port_str, url.port.p, url.port.n);
+                port = atoi(port_str);
+            }
+        }
+
+        if (port == 443) {
+            fprintf(stderr, "HTTPS support is not available in this build. Redirected to: %s\n", current_url_str);
             free(url_mem);
+            free(current_url_str);
+            return 1;
+        }
+
+        // DNS Resolution
+        struct addrinfo hints = {0}, *res;
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+
+        char port_s[16];
+        sprintf(port_s, "%d", port);
+
+        int err = getaddrinfo(host, port_s, &hints, &res);
+        if (err != 0) {
+            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
+            free(url_mem);
+            free(current_url_str);
+            return 1;
+        }
+
+        // Connect
+        int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+        if (sockfd < 0) die("socket");
+
+        if (connect(sockfd, res->ai_addr, res->ai_addrlen) < 0) {
+            perror("connect");
+            freeaddrinfo(res);
+            close(sockfd);
+            free(url_mem);
+            free(current_url_str);
+            return 1;
+        }
+
+        freeaddrinfo(res);
+
+        // Send Request
+        char request[4096];
+        int req_len = snprintf(request, sizeof(request),
+                 "GET %s HTTP/1.1\r\n"
+                 "Host: %s\r\n"
+                 "User-Agent: cosmo-fetch/1.0\r\n"
+                 "Connection: close\r\n"
+                 "\r\n",
+                 path, host);
+
+        if (send(sockfd, request, req_len, 0) < 0) die("send");
+
+        // Read Response and handle headers
+        char buffer[8192]; // Buffer for headers + some body
+        ssize_t n = 0;
+        int total_read = 0;
+        int header_ended = 0;
+        int status = 0;
+
+        // Read until we have headers or full buffer
+        while (total_read < sizeof(buffer) - 1) {
+            n = recv(sockfd, buffer + total_read, sizeof(buffer) - 1 - total_read, 0);
+            if (n <= 0) break;
+            total_read += n;
+            buffer[total_read] = '\0';
+
+            if (strstr(buffer, "\r\n\r\n")) {
+                header_ended = 1;
+                break;
+            }
+        }
+
+        if (total_read <= 0) {
+             fprintf(stderr, "Empty response or error\n");
+             close(sockfd);
+             free(url_mem);
+             free(current_url_str);
+             return 1;
+        }
+
+        // Parse status line
+        if (sscanf(buffer, "HTTP/%*d.%*d %d", &status) != 1) {
+             fprintf(stderr, "Invalid HTTP response\n");
+             close(sockfd);
+             free(url_mem);
+             free(current_url_str);
+             return 1;
+        }
+
+        if (status >= 300 && status < 400) {
+            // Handle Redirect
+            char *loc = strstr(buffer, "\nLocation:");
+            if (!loc) loc = strstr(buffer, "\nlocation:");
+
+            if (loc) {
+                loc += 10; // Skip "\nLocation:"
+                while (*loc == ' ' || *loc == '\t') loc++;
+                char *end = strstr(loc, "\r\n");
+                if (!end) end = strchr(loc, '\n');
+
+                if (end) {
+                    int len = end - loc;
+                    char new_loc[2048] = {0};
+                    if (len < sizeof(new_loc)) {
+                        memcpy(new_loc, loc, len);
+                        new_loc[len] = '\0';
+
+                        fprintf(stderr, "Redirecting to: %s\n", new_loc);
+
+                        // Handle relative URL (simple case)
+                        if (new_loc[0] == '/') {
+                           // Construct absolute URL: scheme://host[:port] + new_loc
+                           char full_url[4096];
+                           snprintf(full_url, sizeof(full_url), "%s://%s:%d%s", scheme, host, port, new_loc);
+                           free(current_url_str);
+                           current_url_str = strdup(full_url);
+                        } else if (!strstr(new_loc, "://")) {
+                           fprintf(stderr, "Warning: potential relative path redirect '%s' might be handled incorrectly if not absolute or root-relative.\n", new_loc);
+                           free(current_url_str);
+                           current_url_str = strdup(new_loc);
+                        } else {
+                           free(current_url_str);
+                           current_url_str = strdup(new_loc);
+                        }
+
+                        close(sockfd);
+                        free(url_mem);
+                        redirects++;
+                        continue;
+                    }
+                }
+            }
+            fprintf(stderr, "Redirect status %d but no Location header found.\n", status);
+            close(sockfd);
+            free(url_mem);
+            free(current_url_str);
+            return 1;
+        } else if (status >= 200 && status < 300) {
+            // Success - print body
+            char *body_start = strstr(buffer, "\r\n\r\n");
+            if (body_start) {
+                body_start += 4;
+                int headers_len = body_start - buffer;
+                int body_len = total_read - headers_len;
+                if (body_len > 0) {
+                    write(STDOUT_FILENO, body_start, body_len);
+                }
+            }
+
+            // Stream the rest
+            while ((n = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
+                write(STDOUT_FILENO, buffer, n);
+            }
+
+            close(sockfd);
+            free(url_mem);
+            free(current_url_str);
+            return 0;
+        } else {
+            fprintf(stderr, "HTTP Request failed with status: %d\n", status);
+            close(sockfd);
+            free(url_mem);
+            free(current_url_str);
             return 1;
         }
     }
 
-    // Append query params if present (basic handling)
-    if (url.params.p && url.params.n > 0) {
-       // Typically handled by ParseUrl by pointing path to the start including params if opaque?
-       // But ParseUrl splits them.
-       // We'll skip complex reconstruction for now and assume simple paths for "binaries".
-    }
-
-    int port = 80;
-    if (strcasecmp(scheme, "https") == 0) {
-        port = 443;
-    }
-
-    if (url.port.p && url.port.n > 0) {
-        char port_str[16] = {0};
-        if (url.port.n < sizeof(port_str)) {
-            memcpy(port_str, url.port.p, url.port.n);
-            port = atoi(port_str);
-        }
-    }
-
-    // printf("Fetching %s (Host: %s, Port: %d, Path: %s)\n", url_str, host, port, path);
-
-    if (port == 443) {
-        fprintf(stderr, "HTTPS support is not available in this build.\n");
-        free(url_mem);
-        return 1;
-    }
-
-    // DNS Resolution
-    struct addrinfo hints = {0}, *res;
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    char port_s[16];
-    sprintf(port_s, "%d", port);
-
-    int err = getaddrinfo(host, port_s, &hints, &res);
-    if (err != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(err));
-        free(url_mem);
-        return 1;
-    }
-
-    // Connect
-    int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (sockfd < 0) die("socket");
-
-    if (connect(sockfd, res->ai_addr, res->ai_addrlen) < 0) die("connect");
-
-    freeaddrinfo(res);
-
-    // Send Request
-    char request[2048];
-    snprintf(request, sizeof(request),
-             "GET %s HTTP/1.1\r\n"
-             "Host: %s\r\n"
-             "User-Agent: cosmo-fetch/1.0\r\n"
-             "Connection: close\r\n"
-             "\r\n",
-             path, host);
-
-    if (send(sockfd, request, strlen(request), 0) < 0) die("send");
-
-    // Read Response and strip headers
-    char buffer[4096];
-    ssize_t n;
-    int header_ended = 0;
-    char header_buffer[MAX_HEADER_SIZE];
-    int header_len = 0;
-
-    while ((n = recv(sockfd, buffer, sizeof(buffer), 0)) > 0) {
-        if (!header_ended) {
-            int copy_len = n;
-            if (header_len + copy_len > MAX_HEADER_SIZE) {
-                copy_len = MAX_HEADER_SIZE - header_len;
-            }
-            memcpy(header_buffer + header_len, buffer, copy_len);
-            int searched = header_len;
-            header_len += copy_len;
-
-            // Search for \r\n\r\n
-            char *end = NULL;
-            // Only search in the new part + 3 chars back
-            int start_search = searched > 3 ? searched - 3 : 0;
-            for (int i = start_search; i < header_len - 3; i++) {
-                if (header_buffer[i] == '\r' && header_buffer[i+1] == '\n' &&
-                    header_buffer[i+2] == '\r' && header_buffer[i+3] == '\n') {
-                    end = header_buffer + i;
-                    break;
-                }
-            }
-
-            if (end) {
-                header_ended = 1;
-                int header_size = (end - header_buffer) + 4;
-                // Determine how much body data is in the current chunk
-                // The chunk in `buffer` corresponds to `header_buffer` tail.
-                // We need to find where `end` maps to in `buffer`.
-                // end points to \r of the sequence.
-                // address of end relative to header_buffer start
-                int offset_in_total = end - header_buffer;
-                int body_start_in_buffer = offset_in_total + 4 - (header_len - n);
-
-                if (body_start_in_buffer < n) {
-                    write(STDOUT_FILENO, buffer + body_start_in_buffer, n - body_start_in_buffer);
-                }
-            } else {
-                if (header_len == MAX_HEADER_SIZE) {
-                     fprintf(stderr, "Header too large\n");
-                     exit(1);
-                }
-            }
-        } else {
-            write(STDOUT_FILENO, buffer, n);
-        }
-    }
-
-    if (n < 0) die("recv");
-
-    close(sockfd);
-    free(url_mem);
-    return 0;
+    fprintf(stderr, "Too many redirects\n");
+    free(current_url_str);
+    return 1;
 }
