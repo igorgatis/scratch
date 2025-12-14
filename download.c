@@ -50,14 +50,13 @@ int main() {
     const char *mise_url = "https://github.com/jdx/mise/releases/download/v2025.12.4/mise-v2025.12.4-linux-x64";
     const char *unzip_url = "https://cosmo.zip/pub/cosmos/bin/unzip";
 
-    // Download to /tmp to avoid file size limits in the repo view
-    if (download_file(mise_url, "/tmp/mise") != 0) {
+    if (download_file(mise_url, "mise") != 0) {
         return 1;
     }
 
-    if (download_file(unzip_url, "/tmp/unzip") != 0) {
+    if (download_file(unzip_url, "unzip") != 0) {
         return 1;
-    }
+        }
 
     return 0;
 }
