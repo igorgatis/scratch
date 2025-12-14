@@ -412,7 +412,7 @@
  *
  * Enable the checkup functions (*_self_test).
  */
-#define MBEDTLS_SELF_TEST
+/*#define MBEDTLS_SELF_TEST*/
 
 /**
  * \def MBEDTLS_CERTS_C
@@ -424,7 +424,7 @@
  *
  * This module is used for testing (ssl_client/server).
  */
-#define MBEDTLS_CERTS_C
+/*#define MBEDTLS_CERTS_C*/
 
 /**
  * \def MBEDTLS_SHA512_NO_SHA384
@@ -1017,7 +1017,7 @@
  *
  * This module enables mbedtls_strerror().
  */
-#define MBEDTLS_ERROR_C
+/*#define MBEDTLS_ERROR_C*/
 
 /**
  * \def MBEDTLS_HKDF_C

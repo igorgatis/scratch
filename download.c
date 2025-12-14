@@ -56,7 +56,7 @@ int main() {
 
     if (download_file(unzip_url, "unzip") != 0) {
         return 1;
-        }
+    }
 
     return 0;
 }
