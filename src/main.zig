@@ -1,11 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const http = std.http;
 
 const MISE_REPO_URL = "https://github.com/jdx/mise";
-const CACHE_DIR_NAME = "mise-zig-cache";
 // Hardcoded version
 const MISE_VERSION = "v2025.12.8";
+const CACHE_DIR_NAME = "mise-" ++ MISE_VERSION;
 
 // Cosmo APE unzip binary URL
 const COSMO_UNZIP_URL = "https://cosmo.zip/pub/cosmos/bin/unzip";
@@ -26,19 +25,14 @@ pub fn main() !void {
     try std.fs.cwd().makePath(cache_dir_path);
 
     // 3. Determine Executable Name and Path
-    // Create version-specific cache directory
-    const version_cache_dir = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, MISE_VERSION });
-    defer allocator.free(version_cache_dir);
-    try std.fs.cwd().makePath(version_cache_dir);
-
     const exe_name = if (os_tag == .windows) "mise.exe" else "mise";
-    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ version_cache_dir, exe_name });
+    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, exe_name });
     defer allocator.free(exe_path);
 
     // 4. Check if mise exists
     if (!fileExists(exe_path)) {
-        std.debug.print("mise not found at {s}. Downloading {s}...\n", .{exe_path, MISE_VERSION});
-        try downloadMise(allocator, version_cache_dir, exe_path, os_tag, cpu_arch);
+        std.debug.print("mise not found at {s}. Downloading {s}...\n", .{ exe_path, MISE_VERSION });
+        try downloadMise(allocator, cache_dir_path, exe_path, os_tag, cpu_arch);
     } else {
         std.debug.print("mise found at {s}.\n", .{exe_path});
     }
@@ -85,13 +79,13 @@ pub fn main() !void {
             std.process.exit(128 + @as(u8, @intCast(sig)));
         },
         .Stopped => |sig| {
-             std.debug.print("Process stopped by signal: {}\n", .{sig});
-             std.process.exit(128 + @as(u8, @intCast(sig)));
+            std.debug.print("Process stopped by signal: {}\n", .{sig});
+            std.process.exit(128 + @as(u8, @intCast(sig)));
         },
         .Unknown => |code| {
-             std.debug.print("Process terminated unknown: {}\n", .{code});
-             std.process.exit(1);
-        }
+            std.debug.print("Process terminated unknown: {}\n", .{code});
+            std.process.exit(1);
+        },
     }
 }
 
@@ -104,13 +98,13 @@ fn getCacheDir(allocator: std.mem.Allocator) ![]const u8 {
             return std.fs.path.join(allocator, &[_][]const u8{ local_app_data, CACHE_DIR_NAME });
         }
         if (env_map.get("USERPROFILE")) |user_profile| {
-             return std.fs.path.join(allocator, &[_][]const u8{ user_profile, "AppData", "Local", CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ user_profile, "AppData", "Local", CACHE_DIR_NAME });
         }
         if (env_map.get("TEMP")) |temp| {
-             return std.fs.path.join(allocator, &[_][]const u8{ temp, CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ temp, CACHE_DIR_NAME });
         }
         if (env_map.get("TMP")) |tmp| {
-             return std.fs.path.join(allocator, &[_][]const u8{ tmp, CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ tmp, CACHE_DIR_NAME });
         }
     } else {
         if (env_map.get("XDG_CACHE_HOME")) |xdg_cache| {
@@ -154,45 +148,44 @@ fn downloadMise(allocator: std.mem.Allocator, cache_dir: []const u8, exe_path: [
     };
 
     const asset_name = if (os_tag == .windows)
-        try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}.zip", .{MISE_VERSION, os_str, arch_str})
+        try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}.zip", .{ MISE_VERSION, os_str, arch_str })
     else
-        try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}", .{MISE_VERSION, os_str, arch_str});
+        try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}", .{ MISE_VERSION, os_str, arch_str });
 
-    const download_url = try std.fmt.allocPrint(arena_allocator, "{s}/releases/download/{s}/{s}", .{MISE_REPO_URL, MISE_VERSION, asset_name});
+    const download_url = try std.fmt.allocPrint(arena_allocator, "{s}/releases/download/{s}/{s}", .{ MISE_REPO_URL, MISE_VERSION, asset_name });
 
     std.debug.print("Downloading from {s}\n", .{download_url});
 
     if (os_tag == .windows) {
-            const zip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, asset_name });
-            defer allocator.free(zip_path);
-            try downloadFile(allocator, download_url, zip_path);
+        const zip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, asset_name });
+        defer allocator.free(zip_path);
+        try downloadFile(allocator, download_url, zip_path);
 
-            const unzip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "unzip.com" });
-            defer allocator.free(unzip_path);
+        const unzip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "unzip.com" });
+        defer allocator.free(unzip_path);
 
-            if (!fileExists(unzip_path)) {
-                std.debug.print("Downloading unzip from {s}\n", .{COSMO_UNZIP_URL});
-                try downloadFile(allocator, COSMO_UNZIP_URL, unzip_path);
-            }
+        if (!fileExists(unzip_path)) {
+            std.debug.print("Downloading unzip from {s}\n", .{COSMO_UNZIP_URL});
+            try downloadFile(allocator, COSMO_UNZIP_URL, unzip_path);
+        }
 
-            // Run unzip
-            const unzip_args = [_][]const u8{ unzip_path, "-o", zip_path, "-d", cache_dir };
+        // Run unzip
+        const unzip_args = [_][]const u8{ unzip_path, "-o", zip_path, "-d", cache_dir };
 
-            var child = std.process.Child.init(&unzip_args, allocator);
-            child.stdin_behavior = .Ignore;
-            child.stdout_behavior = .Inherit;
-            child.stderr_behavior = .Inherit;
-            _ = try child.spawnAndWait();
-
+        var child = std.process.Child.init(&unzip_args, allocator);
+        child.stdin_behavior = .Ignore;
+        child.stdout_behavior = .Inherit;
+        child.stderr_behavior = .Inherit;
+        _ = try child.spawnAndWait();
     } else {
-            try downloadFile(allocator, download_url, exe_path);
-            // chmod +x
-            const file = try std.fs.openFileAbsolute(exe_path, .{});
-            defer file.close();
-            const metadata = try file.metadata();
-            var permissions = metadata.permissions();
-            permissions.inner.mode |= 0o111; // Add execute permission
-            try file.setPermissions(permissions);
+        try downloadFile(allocator, download_url, exe_path);
+        // chmod +x
+        const file = try std.fs.openFileAbsolute(exe_path, .{});
+        defer file.close();
+        const metadata = try file.metadata();
+        var permissions = metadata.permissions();
+        permissions.inner.mode |= 0o111; // Add execute permission
+        try file.setPermissions(permissions);
     }
 }
 
@@ -222,27 +215,27 @@ fn downloadFile(allocator: std.mem.Allocator, url: []const u8, output_path: []co
         const status = request.response.status;
         if (status == .ok) {
             // Success, download
-             const file = try std.fs.createFileAbsolute(output_path, .{});
-             defer file.close();
+            const file = try std.fs.createFileAbsolute(output_path, .{});
+            defer file.close();
 
-             var buf: [4096]u8 = undefined;
-             var reader = request.reader();
-             while (true) {
-                 const n = try reader.read(&buf);
-                 if (n == 0) break;
-                 try file.writeAll(buf[0..n]);
-             }
-             return;
+            var buf: [4096]u8 = undefined;
+            var reader = request.reader();
+            while (true) {
+                const n = try reader.read(&buf);
+                if (n == 0) break;
+                try file.writeAll(buf[0..n]);
+            }
+            return;
         } else if (status == .moved_permanently or status == .found or status == .see_other or status == .temporary_redirect or status == .permanent_redirect) {
             // Handle redirect
-             if (request.response.location) |loc| {
-                 allocator.free(current_url);
-                 current_url = try allocator.dupe(u8, loc);
-                 redirect_count += 1;
-                 continue;
-             } else {
-                 return error.RedirectMissingLocation;
-             }
+            if (request.response.location) |loc| {
+                allocator.free(current_url);
+                current_url = try allocator.dupe(u8, loc);
+                redirect_count += 1;
+                continue;
+            } else {
+                return error.RedirectMissingLocation;
+            }
         } else {
             std.debug.print("HTTP Error: {}\n", .{status});
             return error.DownloadFailed;
