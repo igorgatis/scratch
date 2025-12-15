@@ -6,9 +6,6 @@ const MISE_REPO_URL = "https://github.com/jdx/mise";
 const MISE_VERSION = "v2025.12.7";
 const CACHE_DIR_NAME = "mise.ape";
 
-// Cosmo APE unzip binary URL
-const COSMO_UNZIP_URL = "https://cosmo.zip/pub/cosmos/bin/unzip";
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -155,22 +152,7 @@ fn downloadMise(allocator: std.mem.Allocator, cache_dir: []const u8, exe_path: [
         defer allocator.free(zip_path);
         try downloadFile(allocator, download_url, zip_path);
 
-        const unzip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "unzip.com" });
-        defer allocator.free(unzip_path);
-
-        if (!fileExists(unzip_path)) {
-            std.debug.print("Downloading unzip from {s}\n", .{COSMO_UNZIP_URL});
-            try downloadFile(allocator, COSMO_UNZIP_URL, unzip_path);
-        }
-
-        // Run unzip
-        const unzip_args = [_][]const u8{ unzip_path, "-o", zip_path, "-d", cache_dir };
-
-        var child = std.process.Child.init(&unzip_args, allocator);
-        child.stdin_behavior = .Ignore;
-        child.stdout_behavior = .Inherit;
-        child.stderr_behavior = .Inherit;
-        _ = try child.spawnAndWait();
+        try unzipFile(zip_path, cache_dir);
     } else {
         try downloadFile(allocator, download_url, exe_path);
         // chmod +x
@@ -236,4 +218,28 @@ fn downloadFile(allocator: std.mem.Allocator, url: []const u8, output_path: []co
         }
     }
     return error.TooManyRedirects;
+}
+
+fn unzipFile(zip_path: []const u8, output_dir: []const u8) !void {
+    var file = try std.fs.cwd().openFile(zip_path, .{});
+    defer file.close();
+
+    var zip = try std.zip.Iterator(std.fs.File.SeekableStream).init(file.seekableStream());
+
+    // Allocate a buffer for filename. Max path length usually suffices.
+    var filename_buf: [std.fs.MAX_PATH_BYTES]u8 = undefined;
+
+    while (try zip.next()) |entry| {
+        // Zip iterator in Zig 0.13 seems to handle extraction via entry.extract which reads from the stream.
+        // But we need to know where to extract.
+        // entry.extract takes `dest: std.fs.Dir`.
+        // And it writes the file relative to that dir.
+        // It reads filename from the stream (using the buffer we pass).
+
+        var dir = try std.fs.openDirAbsolute(output_dir, .{});
+        defer dir.close();
+
+        // Extract directly to the directory.
+        _ = try entry.extract(file.seekableStream(), .{}, &filename_buf, dir);
+    }
 }
