@@ -4,7 +4,7 @@ const builtin = @import("builtin");
 const MISE_REPO_URL = "https://github.com/jdx/mise";
 // Hardcoded version
 const MISE_VERSION = "v2025.12.7";
-const CACHE_DIR_NAME = "mise-" ++ MISE_VERSION;
+const CACHE_DIR_NAME = "mise.ape";
 
 // Cosmo APE unzip binary URL
 const COSMO_UNZIP_URL = "https://cosmo.zip/pub/cosmos/bin/unzip";
@@ -20,15 +20,18 @@ pub fn main() !void {
     const cache_dir_path = try getCacheDir(allocator);
     defer allocator.free(cache_dir_path);
 
-    try std.fs.cwd().makePath(cache_dir_path);
+    const version_dir_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, MISE_VERSION });
+    defer allocator.free(version_dir_path);
+
+    try std.fs.cwd().makePath(version_dir_path);
 
     const exe_name = if (os_tag == .windows) "mise.exe" else "mise";
-    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, exe_name });
+    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ version_dir_path, exe_name });
     defer allocator.free(exe_path);
 
     if (!fileExists(exe_path)) {
         std.debug.print("mise not found at {s}. Downloading {s}...\n", .{ exe_path, MISE_VERSION });
-        try downloadMise(allocator, cache_dir_path, exe_path, os_tag, cpu_arch);
+        try downloadMise(allocator, version_dir_path, exe_path, os_tag, cpu_arch);
     } else {
         std.debug.print("mise found at {s}.\n", .{exe_path});
     }
