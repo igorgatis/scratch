@@ -14,22 +14,18 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // 1. Detect OS and Arch
     const os_tag = builtin.os.tag;
     const cpu_arch = builtin.cpu.arch;
 
-    // 2. Identify Cache Directory
     const cache_dir_path = try getCacheDir(allocator);
     defer allocator.free(cache_dir_path);
 
     try std.fs.cwd().makePath(cache_dir_path);
 
-    // 3. Determine Executable Name and Path
     const exe_name = if (os_tag == .windows) "mise.exe" else "mise";
     const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, exe_name });
     defer allocator.free(exe_path);
 
-    // 4. Check if mise exists
     if (!fileExists(exe_path)) {
         std.debug.print("mise not found at {s}. Downloading {s}...\n", .{ exe_path, MISE_VERSION });
         try downloadMise(allocator, cache_dir_path, exe_path, os_tag, cpu_arch);
@@ -37,8 +33,6 @@ pub fn main() !void {
         std.debug.print("mise found at {s}.\n", .{exe_path});
     }
 
-    // 5. Run mise with args
-    // Collect args passed to this program to forward them to mise
     var args_iter = try std.process.argsWithAllocator(allocator);
     defer args_iter.deinit();
 
