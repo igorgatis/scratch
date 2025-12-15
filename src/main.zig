@@ -2,8 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const http = std.http;
 
-const MISE_REPO_OWNER = "jdx";
-const MISE_REPO_NAME = "mise";
+const MISE_REPO_URL = "https://github.com/jdx/mise";
 const CACHE_DIR_NAME = "mise-zig-cache";
 // Hardcoded version
 const MISE_VERSION = "v2025.12.8";
@@ -159,7 +158,7 @@ fn downloadMise(allocator: std.mem.Allocator, cache_dir: []const u8, exe_path: [
     else
         try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}", .{MISE_VERSION, os_str, arch_str});
 
-    const download_url = try std.fmt.allocPrint(arena_allocator, "https://github.com/{s}/{s}/releases/download/{s}/{s}", .{MISE_REPO_OWNER, MISE_REPO_NAME, MISE_VERSION, asset_name});
+    const download_url = try std.fmt.allocPrint(arena_allocator, "{s}/releases/download/{s}/{s}", .{MISE_REPO_URL, MISE_VERSION, asset_name});
 
     std.debug.print("Downloading from {s}\n", .{download_url});
 
