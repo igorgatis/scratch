@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 const MISE_REPO_URL = "https://github.com/jdx/mise";
 // Hardcoded version
-const MISE_VERSION = "v2025.12.8";
+const MISE_VERSION = "v2025.12.7";
 const CACHE_DIR_NAME = "mise-" ++ MISE_VERSION;
 
 // Cosmo APE unzip binary URL
