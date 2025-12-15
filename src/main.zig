@@ -5,6 +5,8 @@ const http = std.http;
 const MISE_REPO_OWNER = "jdx";
 const MISE_REPO_NAME = "mise";
 const CACHE_DIR_NAME = "mise-zig-cache";
+// Hardcoded version
+const MISE_VERSION = "v2025.12.8";
 
 // Cosmo APE unzip binary URL
 const COSMO_UNZIP_URL = "https://cosmo.zip/pub/cosmos/bin/unzip";
@@ -25,14 +27,19 @@ pub fn main() !void {
     try std.fs.cwd().makePath(cache_dir_path);
 
     // 3. Determine Executable Name and Path
+    // Create version-specific cache directory
+    const version_cache_dir = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, MISE_VERSION });
+    defer allocator.free(version_cache_dir);
+    try std.fs.cwd().makePath(version_cache_dir);
+
     const exe_name = if (os_tag == .windows) "mise.exe" else "mise";
-    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, exe_name });
+    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ version_cache_dir, exe_name });
     defer allocator.free(exe_path);
 
     // 4. Check if mise exists
     if (!fileExists(exe_path)) {
-        std.debug.print("mise not found at {s}. Downloading...\n", .{exe_path});
-        try downloadMise(allocator, cache_dir_path, exe_path, os_tag, cpu_arch);
+        std.debug.print("mise not found at {s}. Downloading {s}...\n", .{exe_path, MISE_VERSION});
+        try downloadMise(allocator, version_cache_dir, exe_path, os_tag, cpu_arch);
     } else {
         std.debug.print("mise found at {s}.\n", .{exe_path});
     }
@@ -100,6 +107,12 @@ fn getCacheDir(allocator: std.mem.Allocator) ![]const u8 {
         if (env_map.get("USERPROFILE")) |user_profile| {
              return std.fs.path.join(allocator, &[_][]const u8{ user_profile, "AppData", "Local", CACHE_DIR_NAME });
         }
+        if (env_map.get("TEMP")) |temp| {
+             return std.fs.path.join(allocator, &[_][]const u8{ temp, CACHE_DIR_NAME });
+        }
+        if (env_map.get("TMP")) |tmp| {
+             return std.fs.path.join(allocator, &[_][]const u8{ tmp, CACHE_DIR_NAME });
+        }
     } else {
         if (env_map.get("XDG_CACHE_HOME")) |xdg_cache| {
             return std.fs.path.join(allocator, &[_][]const u8{ xdg_cache, CACHE_DIR_NAME });
@@ -107,6 +120,8 @@ fn getCacheDir(allocator: std.mem.Allocator) ![]const u8 {
         if (env_map.get("HOME")) |home| {
             return std.fs.path.join(allocator, &[_][]const u8{ home, ".cache", CACHE_DIR_NAME });
         }
+        // Fallback to /tmp
+        return std.fs.path.join(allocator, &[_][]const u8{ "/tmp", CACHE_DIR_NAME });
     }
     return error.CacheDirNotFound;
 }
@@ -121,13 +136,10 @@ fn downloadMise(allocator: std.mem.Allocator, cache_dir: []const u8, exe_path: [
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    // 1. Fetch Latest Release Info
-    const release_info = try fetchLatestRelease(arena_allocator);
+    // Construct URL directly
+    // Linux x64: https://github.com/jdx/mise/releases/download/v2025.12.8/mise-v2025.12.8-linux-x64
+    // Windows x64: https://github.com/jdx/mise/releases/download/v2025.12.8/mise-v2025.12.8-windows-x64.zip
 
-    const tag_name = release_info.tag_name;
-    std.debug.print("Latest version: {s}\n", .{tag_name});
-
-    // 3. Construct Asset Name based on OS/Arch
     const os_str = switch (os_tag) {
         .linux => "linux",
         .macos => "macos",
@@ -142,129 +154,47 @@ fn downloadMise(allocator: std.mem.Allocator, cache_dir: []const u8, exe_path: [
         else => return error.UnsupportedArch,
     };
 
-    // Construct target asset name prefix
-    const asset_prefix = try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}", .{tag_name, os_str, arch_str});
+    const asset_name = if (os_tag == .windows)
+        try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}.zip", .{MISE_VERSION, os_str, arch_str})
+    else
+        try std.fmt.allocPrint(arena_allocator, "mise-{s}-{s}-{s}", .{MISE_VERSION, os_str, arch_str});
 
-    var download_url: ?[]const u8 = null;
-    var asset_name: ?[]const u8 = null;
+    const download_url = try std.fmt.allocPrint(arena_allocator, "https://github.com/{s}/{s}/releases/download/{s}/{s}", .{MISE_REPO_OWNER, MISE_REPO_NAME, MISE_VERSION, asset_name});
 
-    // Iterate over assets to find match
-    for (release_info.assets) |asset| {
-        if (std.mem.startsWith(u8, asset.name, asset_prefix)) {
-            // Check extension preferences
-            if (os_tag == .windows) {
-                if (std.mem.endsWith(u8, asset.name, ".zip")) {
-                    download_url = asset.browser_download_url;
-                    asset_name = asset.name;
-                    break;
-                }
-            } else {
-                // Prefer no extension (binary)
-                if (std.mem.eql(u8, asset.name, asset_prefix)) {
-                     download_url = asset.browser_download_url;
-                     asset_name = asset.name;
-                     break;
-                }
+    std.debug.print("Downloading from {s}\n", .{download_url});
+
+    if (os_tag == .windows) {
+            const zip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, asset_name });
+            defer allocator.free(zip_path);
+            try downloadFile(allocator, download_url, zip_path);
+
+            const unzip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "unzip.com" });
+            defer allocator.free(unzip_path);
+
+            if (!fileExists(unzip_path)) {
+                std.debug.print("Downloading unzip from {s}\n", .{COSMO_UNZIP_URL});
+                try downloadFile(allocator, COSMO_UNZIP_URL, unzip_path);
             }
-        }
-    }
 
-    if (download_url) |url| {
-        std.debug.print("Downloading {s} from {s}\n", .{asset_name.?, url});
+            // Run unzip
+            const unzip_args = [_][]const u8{ unzip_path, "-o", zip_path, "-d", cache_dir };
 
-        if (os_tag == .windows) {
-             const zip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, asset_name.? });
-             defer allocator.free(zip_path);
-             try downloadFile(allocator, url, zip_path);
+            var child = std.process.Child.init(&unzip_args, allocator);
+            child.stdin_behavior = .Ignore;
+            child.stdout_behavior = .Inherit;
+            child.stderr_behavior = .Inherit;
+            _ = try child.spawnAndWait();
 
-             const unzip_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir, "unzip.com" });
-             defer allocator.free(unzip_path);
-
-             if (!fileExists(unzip_path)) {
-                 std.debug.print("Downloading unzip from {s}\n", .{COSMO_UNZIP_URL});
-                 try downloadFile(allocator, COSMO_UNZIP_URL, unzip_path);
-             }
-
-             // Run unzip
-             const unzip_args = [_][]const u8{ unzip_path, "-o", zip_path, "-d", cache_dir };
-
-             var child = std.process.Child.init(&unzip_args, allocator);
-             child.stdin_behavior = .Ignore;
-             child.stdout_behavior = .Inherit;
-             child.stderr_behavior = .Inherit;
-             _ = try child.spawnAndWait();
-
-        } else {
-             try downloadFile(allocator, url, exe_path);
-             // chmod +x
-             const file = try std.fs.openFileAbsolute(exe_path, .{});
-             defer file.close();
-             const metadata = try file.metadata();
-             var permissions = metadata.permissions();
-             permissions.inner.mode |= 0o111; // Add execute permission
-             try file.setPermissions(permissions);
-        }
     } else {
-        return error.AssetNotFound;
+            try downloadFile(allocator, download_url, exe_path);
+            // chmod +x
+            const file = try std.fs.openFileAbsolute(exe_path, .{});
+            defer file.close();
+            const metadata = try file.metadata();
+            var permissions = metadata.permissions();
+            permissions.inner.mode |= 0o111; // Add execute permission
+            try file.setPermissions(permissions);
     }
-}
-
-// Helpers for HTTP and JSON
-
-const Release = struct {
-    tag_name: []const u8,
-    assets: []Asset,
-};
-
-const Asset = struct {
-    name: []const u8,
-    browser_download_url: []const u8,
-};
-
-fn fetchLatestRelease(allocator: std.mem.Allocator) !Release {
-    var client = std.http.Client{ .allocator = allocator };
-    defer client.deinit();
-
-    // 0.13.0 style for loading CA bundle.
-    // .initDefaultBundle() is removed or different.
-    // But client.fetch handles it? No we are using low level open.
-    // Try to load bundle.
-    // If this fails (e.g. cross compile or minimal env), we might need to be explicit.
-    // But let's assume standard environment.
-
-    // Zig 0.13.0 does not auto-load CA certs in Client init.
-    // We need to call loadDefaultBundle.
-    // Wait, Client struct definition has `ca_bundle`.
-    // We can try calling `client.loadDefaultBundle(allocator, .{})` if it exists.
-    // Or we can construct a bundle.
-
-    // Based on grep, `loadDefaultBundle` is not a method on Client in 0.13.0?
-    // But `client.ca_bundle` exists.
-    // And `Bundle` has `rescan`.
-    // So:
-    try client.ca_bundle.rescan(allocator);
-
-    const uri = try std.Uri.parse("https://api.github.com/repos/jdx/mise/releases/latest");
-
-    var header_buffer: [16384]u8 = undefined;
-    var request = try client.open(.GET, uri, .{ .server_header_buffer = &header_buffer });
-    defer request.deinit();
-
-    request.headers.user_agent = .{ .override = "mise-loader-zig" };
-
-    try request.send();
-    try request.finish();
-    try request.wait();
-
-    if (request.response.status != .ok) {
-        return error.GitHubApiFailed;
-    }
-
-    const body = try request.reader().readAllAlloc(allocator, 1024 * 1024);
-
-    const parsed = try std.json.parseFromSlice(Release, allocator, body, .{ .ignore_unknown_fields = true });
-
-    return parsed.value;
 }
 
 fn downloadFile(allocator: std.mem.Allocator, url: []const u8, output_path: []const u8) !void {
