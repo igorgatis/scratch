@@ -20,18 +20,15 @@ pub fn main() !void {
     const cache_dir_path = try getCacheDir(allocator);
     defer allocator.free(cache_dir_path);
 
-    const version_dir_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, MISE_VERSION });
-    defer allocator.free(version_dir_path);
-
-    try std.fs.cwd().makePath(version_dir_path);
+    try std.fs.cwd().makePath(cache_dir_path);
 
     const exe_name = if (os_tag == .windows) "mise.exe" else "mise";
-    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ version_dir_path, exe_name });
+    const exe_path = try std.fs.path.join(allocator, &[_][]const u8{ cache_dir_path, exe_name });
     defer allocator.free(exe_path);
 
     if (!fileExists(exe_path)) {
         std.debug.print("mise not found at {s}. Downloading {s}...\n", .{ exe_path, MISE_VERSION });
-        try downloadMise(allocator, version_dir_path, exe_path, os_tag, cpu_arch);
+        try downloadMise(allocator, cache_dir_path, exe_path, os_tag, cpu_arch);
     } else {
         std.debug.print("mise found at {s}.\n", .{exe_path});
     }
@@ -92,26 +89,26 @@ fn getCacheDir(allocator: std.mem.Allocator) ![]const u8 {
 
     if (builtin.os.tag == .windows) {
         if (env_map.get("LOCALAPPDATA")) |local_app_data| {
-            return std.fs.path.join(allocator, &[_][]const u8{ local_app_data, CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ local_app_data, CACHE_DIR_NAME, MISE_VERSION });
         }
         if (env_map.get("USERPROFILE")) |user_profile| {
-            return std.fs.path.join(allocator, &[_][]const u8{ user_profile, "AppData", "Local", CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ user_profile, "AppData", "Local", CACHE_DIR_NAME, MISE_VERSION });
         }
         if (env_map.get("TEMP")) |temp| {
-            return std.fs.path.join(allocator, &[_][]const u8{ temp, CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ temp, CACHE_DIR_NAME, MISE_VERSION });
         }
         if (env_map.get("TMP")) |tmp| {
-            return std.fs.path.join(allocator, &[_][]const u8{ tmp, CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ tmp, CACHE_DIR_NAME, MISE_VERSION });
         }
     } else {
         if (env_map.get("XDG_CACHE_HOME")) |xdg_cache| {
-            return std.fs.path.join(allocator, &[_][]const u8{ xdg_cache, CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ xdg_cache, CACHE_DIR_NAME, MISE_VERSION });
         }
         if (env_map.get("HOME")) |home| {
-            return std.fs.path.join(allocator, &[_][]const u8{ home, ".cache", CACHE_DIR_NAME });
+            return std.fs.path.join(allocator, &[_][]const u8{ home, ".cache", CACHE_DIR_NAME, MISE_VERSION });
         }
         // Fallback to /tmp
-        return std.fs.path.join(allocator, &[_][]const u8{ "/tmp", CACHE_DIR_NAME });
+        return std.fs.path.join(allocator, &[_][]const u8{ "/tmp", CACHE_DIR_NAME, MISE_VERSION });
     }
     return error.CacheDirNotFound;
 }
