@@ -25,31 +25,32 @@ pub fn build(b: *std.Build) void {
     obj.root_module.link_libc = true;
 
     // Define paths to Cosmopolitan tools
-    const cosmocc_dir = "/tmp/cosmocc/bin";
-    const cc_exe = b.pathJoin(&.{ cosmocc_dir, "x86_64-unknown-cosmo-cc" });
-    const objcopy_exe = b.pathJoin(&.{ cosmocc_dir, "x86_64-linux-cosmo-objcopy" });
+    // Allow overriding via -Dcosmocc_dir=/path/to/cosmocc
+    const cosmocc_dir = b.option([]const u8, "cosmocc_dir", "Path to cosmocc directory") orelse "/tmp/cosmocc";
+
+    // Normalize path to use forward slashes for shell compatibility
+    const cosmocc_dir_fixed = b.allocator.dupe(u8, cosmocc_dir) catch @panic("OOM");
+    std.mem.replaceScalar(u8, cosmocc_dir_fixed, '\\', '/');
+
+    // Construct paths manually with forward slashes to avoid Windows backslash issues in 'sh'
+    const cc_exe = b.fmt("{s}/bin/x86_64-unknown-cosmo-cc", .{cosmocc_dir_fixed});
+    const objcopy_exe = b.fmt("{s}/bin/x86_64-linux-cosmo-objcopy", .{cosmocc_dir_fixed});
 
     // Step 2: Link the object file using cosmocc
-    // We'll output to zig-out/bin via the install step mechanics or manually.
-    // For 'addSystemCommand', we can specify outputs if we want to track them.
-
-    // We use a custom installation directory 'zig-out/bin' relative to prefix.
     const install_step = b.getInstallStep();
     _ = b.getInstallPath(.bin, ""); // absolute path to zig-out/bin
 
-    // Since we can't easily get the absolute path of 'bin_path' at configuration time
-    // without some side effects, and system commands run at build time,
-    // we will chain the commands to output to a specific location or rely on cwd.
+    // Output paths - we want these relative to CWD for the command, but we are inside the build runner.
+    // 'zig-out/bin' is standard.
+    const elf_out = "zig-out/bin/hello.elf";
+    const com_out = "zig-out/bin/hello.com";
 
-    // Let's use 'zig-out/bin/hello.elf' and 'zig-out/bin/hello.com'.
-    // Note: Zig runs commands from the project root.
-
-    const elf_out = b.pathJoin(&.{ "zig-out", "bin", "hello.elf" });
-    const com_out = b.pathJoin(&.{ "zig-out", "bin", "hello.com" });
-
-    // Ensure directory exists
+    // Ensure directory exists.
+    // We use a custom step to create the directory to avoid "mkdir" system command issues if possible,
+    // but addSystemCommand "mkdir -p" is generally safe in the environments we target (bash available).
     const mkdir_cmd = b.addSystemCommand(&.{ "mkdir", "-p", "zig-out/bin" });
 
+    // Wrapper for shell execution.
     const link_cmd = b.addSystemCommand(&.{ "sh", "-c" });
     // "cc -Os -o zig-out/bin/hello.elf $0"
     const link_script = b.fmt("\"{s}\" -Os -o \"{s}\" \"$0\"", .{ cc_exe, elf_out });
@@ -60,7 +61,6 @@ pub fn build(b: *std.Build) void {
 
     // Step 3: Convert ELF to APE using objcopy
     const objcopy_cmd = b.addSystemCommand(&.{ "sh", "-c" });
-    // "objcopy -SO binary zig-out/bin/hello.elf zig-out/bin/hello.com"
     const objcopy_script = b.fmt("\"{s}\" -SO binary \"{s}\" \"{s}\"", .{ objcopy_exe, elf_out, com_out });
     objcopy_cmd.addArg(objcopy_script);
 
