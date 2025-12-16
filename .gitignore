@@ -1,0 +1,20 @@
+# Zig artifacts
+zig-cache/
+zig-out/
+
+# Custom build directory
+builder/
+
+# Object files and executables (in root, if any)
+*.o
+*.o.o
+*.elf
+*.com
+hello
+
+# Cosmopolitan toolchain (if local)
+cosmocc/
+
+# Temporary files
+*~
+*.swp
