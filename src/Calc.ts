@@ -1,8 +1,8 @@
 export class Calc {
   private display: string = "0";
-  private operand: number | null = null;
+  private operand: string | null = null;
   private operator: string | null = null;
-  private shouldResetDisplay: boolean = false;
+  private resetDisplay: boolean = false;
   private error: string | null = null;
 
   handleSequence(sequence: string): void {
@@ -13,10 +13,7 @@ export class Calc {
 
   handle(inst: string): void {
     if (this.error && inst !== "c") {
-       // If in error state, only clear can reset it?
-       // Or should typing a number reset it?
-       // Let's assume typing a number resets it as per `shouldResetDisplay` logic usually.
-       // But let's look at `handleDigit`.
+       // Error state logic handled in specific methods or reset by them
     }
 
     if (/[0-9]/.test(inst)) {
@@ -58,15 +55,15 @@ export class Calc {
     if (this.error) {
         this.error = null;
         this.display = digit;
-        this.shouldResetDisplay = false;
+        this.resetDisplay = false;
         this.operand = null;
         this.operator = null;
         return;
     }
 
-    if (this.shouldResetDisplay) {
+    if (this.resetDisplay) {
       this.display = digit;
-      this.shouldResetDisplay = false;
+      this.resetDisplay = false;
     } else {
       if (this.display === "0") {
         this.display = digit;
@@ -80,15 +77,15 @@ export class Calc {
     if (this.error) {
         this.error = null;
         this.display = "0.";
-        this.shouldResetDisplay = false;
+        this.resetDisplay = false;
         this.operand = null;
         this.operator = null;
         return;
     }
 
-    if (this.shouldResetDisplay) {
+    if (this.resetDisplay) {
       this.display = "0.";
-      this.shouldResetDisplay = false;
+      this.resetDisplay = false;
     } else {
       if (!this.display.includes(".")) {
         this.display += ".";
@@ -100,14 +97,14 @@ export class Calc {
     this.display = "0";
     this.operand = null;
     this.operator = null;
-    this.shouldResetDisplay = false;
+    this.resetDisplay = false;
     this.error = null;
   }
 
   private handleDelete(): void {
     if (this.error) return;
 
-    if (this.shouldResetDisplay) {
+    if (this.resetDisplay) {
         return;
     }
 
@@ -124,10 +121,10 @@ export class Calc {
     const val = parseFloat(this.display);
     if (val < 0) {
         this.error = "Error";
-        this.shouldResetDisplay = true;
+        this.resetDisplay = true;
     } else {
         this.display = Math.sqrt(val).toString();
-        this.shouldResetDisplay = true;
+        this.resetDisplay = true;
     }
   }
 
@@ -141,14 +138,14 @@ export class Calc {
   private handleOperator(op: string): void {
     if (this.error) return;
 
-    if (this.operator !== null && !this.shouldResetDisplay) {
+    if (this.operator !== null && !this.resetDisplay) {
         this.calculate();
         if (this.error) return;
     }
 
-    this.operand = parseFloat(this.display);
+    this.operand = this.display;
     this.operator = op;
-    this.shouldResetDisplay = true;
+    this.resetDisplay = true;
   }
 
   private handleEqual(): void {
@@ -160,13 +157,13 @@ export class Calc {
         if (!this.error) {
             this.operator = null;
             this.operand = null;
-            this.shouldResetDisplay = true;
+            this.resetDisplay = true;
         }
     }
   }
 
   private calculate(): void {
-    const val1 = this.operand!;
+    const val1 = parseFloat(this.operand!);
     const val2 = parseFloat(this.display);
     let result = 0;
 
@@ -177,7 +174,7 @@ export class Calc {
       case "/":
         if (val2 === 0) {
             this.error = "Error";
-            this.shouldResetDisplay = true;
+            this.resetDisplay = true;
             return;
         }
         result = val1 / val2;
