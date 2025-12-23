@@ -3,6 +3,7 @@ export class Calc {
   private operand: number | null = null;
   private operator: string | null = null;
   private shouldResetDisplay: boolean = false;
+  private error: string | null = null;
 
   handleSequence(sequence: string): void {
     for (const char of sequence) {
@@ -11,6 +12,13 @@ export class Calc {
   }
 
   handle(inst: string): void {
+    if (this.error && inst !== "c") {
+       // If in error state, only clear can reset it?
+       // Or should typing a number reset it?
+       // Let's assume typing a number resets it as per `shouldResetDisplay` logic usually.
+       // But let's look at `handleDigit`.
+    }
+
     if (/[0-9]/.test(inst)) {
       this.handleDigit(inst);
     } else if (inst === ".") {
@@ -31,22 +39,15 @@ export class Calc {
   }
 
   getLines(): string[] {
+    if (this.error) {
+        return [this.error];
+    }
+
     const lines: string[] = [];
 
     // First line: history (operand + operator)
     if (this.operand !== null && this.operator !== null) {
       lines.push(`${this.operand} ${this.operator}`);
-    } else {
-       // If just a number, maybe empty first line?
-       // User says "pode retornar 1 ou 2 linhas".
-       // If I return just one line ["123"], it's valid.
-    }
-
-    // Second line: current display
-    // However, if we want to show consistent UI, maybe just return what we have.
-    // Let's return just the display if no history.
-    if (lines.length === 0) {
-      return [this.display];
     }
 
     lines.push(this.display);
@@ -54,6 +55,15 @@ export class Calc {
   }
 
   private handleDigit(digit: string): void {
+    if (this.error) {
+        this.error = null;
+        this.display = digit;
+        this.shouldResetDisplay = false;
+        this.operand = null;
+        this.operator = null;
+        return;
+    }
+
     if (this.shouldResetDisplay) {
       this.display = digit;
       this.shouldResetDisplay = false;
@@ -67,6 +77,15 @@ export class Calc {
   }
 
   private handleDot(): void {
+    if (this.error) {
+        this.error = null;
+        this.display = "0.";
+        this.shouldResetDisplay = false;
+        this.operand = null;
+        this.operator = null;
+        return;
+    }
+
     if (this.shouldResetDisplay) {
       this.display = "0.";
       this.shouldResetDisplay = false;
@@ -82,15 +101,13 @@ export class Calc {
     this.operand = null;
     this.operator = null;
     this.shouldResetDisplay = false;
+    this.error = null;
   }
 
   private handleDelete(): void {
+    if (this.error) return;
+
     if (this.shouldResetDisplay) {
-        // If we just finished a calc or pressed an operator, 'd' usually does nothing or resets to 0?
-        // Let's assume it works on the displayed number but doesn't exit "reset mode" until a digit is pressed?
-        // Actually standard calculator: if you have a result, backspace does nothing or clears it.
-        // Let's make it clear the display if it's a result, or do nothing.
-        // For simplicity: if waiting for new number, do nothing.
         return;
     }
 
@@ -102,28 +119,31 @@ export class Calc {
   }
 
   private handleSqrt(): void {
+    if (this.error) return;
+
     const val = parseFloat(this.display);
     if (val < 0) {
-        this.display = "Error";
+        this.error = "Error";
         this.shouldResetDisplay = true;
     } else {
         this.display = Math.sqrt(val).toString();
-        // After an immediate operation like sqrt, usually we are ready to operate on it,
-        // but if we type a digit, it should probably replace it?
         this.shouldResetDisplay = true;
     }
   }
 
   private handleToggleSign(): void {
+    if (this.error) return;
+
     const val = parseFloat(this.display);
     this.display = (-val).toString();
-    // Do NOT set shouldResetDisplay here, usually we want to keep editing or using this number.
   }
 
   private handleOperator(op: string): void {
+    if (this.error) return;
+
     if (this.operator !== null && !this.shouldResetDisplay) {
-        // We have `operand op display`. Calculate it first.
         this.calculate();
+        if (this.error) return;
     }
 
     this.operand = parseFloat(this.display);
@@ -132,11 +152,16 @@ export class Calc {
   }
 
   private handleEqual(): void {
+    if (this.error) return;
+
     if (this.operator !== null && this.operand !== null) {
         this.calculate();
-        this.operator = null;
-        this.operand = null;
-        this.shouldResetDisplay = true;
+        // If calculation caused error, it's set in calculate
+        if (!this.error) {
+            this.operator = null;
+            this.operand = null;
+            this.shouldResetDisplay = true;
+        }
     }
   }
 
@@ -151,7 +176,7 @@ export class Calc {
       case "*": result = val1 * val2; break;
       case "/":
         if (val2 === 0) {
-            this.display = "Error";
+            this.error = "Error";
             this.shouldResetDisplay = true;
             return;
         }
@@ -159,10 +184,6 @@ export class Calc {
         break;
     }
 
-    // Handle floating point precision issues?
-    // e.g. 0.1 + 0.2 = 0.30000000000000004
-    // The user didn't ask for it, but it's nice.
-    // For now I'll stick to raw JS result or maybe strip slightly.
     this.display = result.toString();
   }
 }
