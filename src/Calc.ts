@@ -4,6 +4,12 @@ export class Calc {
   private operator: string | null = null;
   private shouldResetDisplay: boolean = false;
 
+  handleSequence(sequence: string): void {
+    for (const char of sequence) {
+      this.handle(char);
+    }
+  }
+
   handle(inst: string): void {
     if (/[0-9]/.test(inst)) {
       this.handleDigit(inst);

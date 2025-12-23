@@ -13,14 +13,12 @@ describe("Calc", () => {
   });
 
   it("should handle digits", () => {
-    calc.handle("1");
-    calc.handle("2");
+    calc.handleSequence("12");
     expect(calc.getLines()).toEqual(["12"]);
   });
 
   it("should handle addition", () => {
-    calc.handle("1");
-    calc.handle("+");
+    calc.handleSequence("1+");
     expect(calc.getLines()).toEqual(["1 +", "1"]);
     calc.handle("2");
     expect(calc.getLines()).toEqual(["1 +", "2"]);
@@ -29,68 +27,50 @@ describe("Calc", () => {
   });
 
   it("should handle chained addition", () => {
-    calc.handle("1");
-    calc.handle("+");
-    calc.handle("2");
-    calc.handle("+"); // Should calc 1+2=3, set 3 as operand, + as operator
+    calc.handleSequence("1+2+"); // Should calc 1+2=3, set 3 as operand, + as operator
     expect(calc.getLines()).toEqual(["3 +", "3"]);
-    calc.handle("3");
-    calc.handle("=");
+    calc.handleSequence("3=");
     expect(calc.getLines()).toEqual(["6"]);
   });
 
   it("should handle decimal", () => {
-    calc.handle("1");
-    calc.handle(".");
-    calc.handle("5");
+    calc.handleSequence("1.5");
     expect(calc.getLines()).toEqual(["1.5"]);
   });
 
   it("should ignore multiple decimals", () => {
-    calc.handle("1");
-    calc.handle(".");
-    calc.handle("5");
-    calc.handle(".");
+    calc.handleSequence("1.5.");
     expect(calc.getLines()).toEqual(["1.5"]);
   });
 
   it("should handle clear", () => {
-    calc.handle("1");
-    calc.handle("+");
-    calc.handle("c");
+    calc.handleSequence("1+c");
     expect(calc.getLines()).toEqual(["0"]);
   });
 
   it("should handle delete", () => {
-    calc.handle("1");
-    calc.handle("2");
-    calc.handle("d");
+    calc.handleSequence("12d");
     expect(calc.getLines()).toEqual(["1"]);
     calc.handle("d");
     expect(calc.getLines()).toEqual(["0"]);
   });
 
   it("should handle sqrt", () => {
-    calc.handle("9");
-    calc.handle("s");
+    calc.handleSequence("9s");
     expect(calc.getLines()).toEqual(["3"]);
   });
 
   it("should handle toggle sign", () => {
-    calc.handle("5");
-    calc.handle("t");
+    calc.handleSequence("5t");
     expect(calc.getLines()).toEqual(["-5"]);
     calc.handle("t");
     expect(calc.getLines()).toEqual(["5"]);
   });
 
   it("should handle operator change", () => {
-    calc.handle("5");
-    calc.handle("+");
-    calc.handle("*"); // Change + to *
+    calc.handleSequence("5+*"); // Change + to *
     expect(calc.getLines()).toEqual(["5 *", "5"]);
-    calc.handle("2");
-    calc.handle("=");
+    calc.handleSequence("2=");
     expect(calc.getLines()).toEqual(["10"]);
   });
 });
