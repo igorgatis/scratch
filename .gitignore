@@ -3,7 +3,7 @@ zig-cache/
 zig-out/
 
 # Custom build directory
-builder/
+build/
 
 # Object files and executables (in root, if any)
 *.o
@@ -18,3 +18,4 @@ cosmocc/
 # Temporary files
 *~
 *.swp
+.zig-cache/

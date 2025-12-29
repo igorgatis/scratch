@@ -1,41 +1,72 @@
-# Makefile for Hello World APE
+# Tools:
+APE_PREFIX = mise exec http:cosmocc --
+MKDIR = $(APE_PREFIX) mkdir.ape
+RM = $(APE_PREFIX) rm.ape
+FIND = mise exec http:cosmos-find -- find
+ZIP = mise exec http:cosmos-zip -- zip
+CC = mise exec http:cosmocc -- cosmocc
+FIXUPOBJ = mise exec http:cosmocc -- fixupobj
+
+
 
 # Paths to tools (adjust if necessary)
-ZIG ?= /tmp/zig/zig
-COSMOCC_DIR ?= /tmp/cosmocc
-CC ?= $(COSMOCC_DIR)/bin/x86_64-unknown-cosmo-cc
-OBJCOPY ?= $(COSMOCC_DIR)/bin/x86_64-linux-cosmo-objcopy
-
-# Output directory
-BUILD_DIR = builder
-
-# Targets
-TARGET = $(BUILD_DIR)/hello.com
-ELF = $(BUILD_DIR)/hello.elf
-OBJ = $(BUILD_DIR)/hello.o
-
+ZIG ?= mise exec zig -- zig
+# CC ?= $(COSMOCC_DIR)/bin/x86_64-unknown-cosmo-cc
+# CC = mise exec http:cosmocc -- cosmocc
+CC = mise exec zig -- zig cc
+#OBJCOPY ?= $(COSMOCC_DIR)/bin/x86_64-linux-cosmo-objcopy
+#OBJCOPY = mise exec zig -- zig objcopy
+COSMOCC = mise exec http:cosmocc -- cosmocc
 # Flags
-ZIG_FLAGS = build-obj -target x86_64-freestanding -fno-stack-check -lc -O ReleaseSmall
+ZIG_FLAGS = build-obj -O ReleaseSmall
+#ZIG_FLAGS = build-obj -O ReleaseSmall
+# ZIG_FLAGS = build-obj -O ReleaseSmall -cflags \
+#     -D__COSMOPOLITAN__ -D__COSMOCC__ -D__FATCOSMOCC__ \
+#     -DTINY -D_COSMO_SOURCE \
+#     -fno-semantic-interposition -Wno-implicit-int \
+#     -mno-tls-direct-seg-refs -fno-pie -nostdinc \
+#     -isystem "$(shell mise where http:cosmocc)/include" \
+#     -I. \
+# 	--
 
-.PHONY: all clean run dir
+CFLAGS = -Os -mtiny -mclang -DTINY -D_COSMO_SOURCE -I. -I cosmopolitan -include stdbool.h -v
 
-all: dir $(TARGET)
+BUILD_DIR = build
+TARGET = $(BUILD_DIR)/hello.com
 
-dir:
-	mkdir -p $(BUILD_DIR)
+C_SRCS := 
+ZIG_SRCS := hello.zig
 
-$(TARGET): $(ELF)
-	$(OBJCOPY) -SO binary $< $@
-	chmod +x $@
+C_OBJS := $(addprefix $(BUILD_DIR)/c/,$(C_SRCS:.c=.o))
+ZIG_OBJS := $(addprefix $(BUILD_DIR)/zig/,$(ZIG_SRCS:.zig=.o))
 
-$(ELF): $(OBJ)
-	$(CC) -Os -o $@ $<
+.PHONY: all clean
 
-$(OBJ): hello.zig
-	$(ZIG) $(ZIG_FLAGS) -femit-bin=$@ $<
+all: $(TARGET)
 
-run: $(TARGET)
-	./$(TARGET)
+# $(TARGET): $(ELF)
+# 	$(OBJCOPY) -SO binary $< $@
+# 	chmod +x $@
+
+# $(ELF): $(OBJ)
+# 	$(CC) -Os -o $@ $<
+
+# $(ZIG_OBJS): hello.zig
+# 	$(ZIG) $(ZIG_FLAGS) -femit-bin=$@ $<
+
+$(TARGET): $(C_OBJS) $(ZIG_OBJS)
+	$(COSMOCC) $(CFLAGS) -o $@ $<
+
+$(BUILD_DIR)/zig/%.o: %.zig
+	@$(MKDIR) -p $(dir $@).aarch64
+	$(ZIG) $(ZIG_FLAGS) -target x86_64-freestanding -femit-bin=$@ $<
+	$(FIXUPOBJ) $@
+	$(ZIG) $(ZIG_FLAGS) -target aarch64-freestanding -femit-bin=$(dir $@).aarch64/$(notdir $@) $<
+	$(FIXUPOBJ) $(dir $@).aarch64/$(notdir $@)
+
+$(BUILD_DIR)/c/%.o: %.c
+	@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)
