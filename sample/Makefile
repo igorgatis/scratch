@@ -1,8 +1,8 @@
 # Tools:
-APE_PREFIX = mise exec http:cosmocc --
-CP = $(APE_PREFIX) cp.ape
-MKDIR = $(APE_PREFIX) mkdir.ape
-RM = $(APE_PREFIX) rm.ape
+MISE_X_COSMOCC = mise exec http:cosmocc --
+CP = $(MISE_X_COSMOCC) cp.ape
+MKDIR = $(MISE_X_COSMOCC) mkdir.ape
+RM = $(MISE_X_COSMOCC) rm.ape
 FIND = mise exec http:cosmos-find -- find
 ZIP = mise exec http:cosmos-zip -- zip
 CC = mise exec http:cosmocc -- cosmocc
