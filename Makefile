@@ -34,6 +34,8 @@ $(OUT)/%.o: %.zig
 	$(ZIG) build-obj $(ZIGFLAGS_AARCH64) -femit-bin=$(dir $@).aarch64/$(notdir $@) $<
 	$(FIXUPOBJ) $(dir $@).aarch64/$(notdir $@)
 
+$(OBJS): $(MAKEFILE_LIST)
+
 $(TARGET): $(OBJS)
 	@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $<

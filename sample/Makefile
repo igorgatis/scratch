@@ -24,6 +24,8 @@ $(OUT)/%.o: %.c
 	@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ -c $<
 
+$(OBJS): $(MAKEFILE_LIST)
+
 $(TARGET): $(OBJS)
 	@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $<
