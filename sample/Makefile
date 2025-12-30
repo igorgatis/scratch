@@ -8,27 +8,26 @@ ZIP = mise exec http:cosmos-zip -- zip
 CC = mise exec http:cosmocc -- cosmocc
 
 # Params:
-BUILD_DIR = build
-TARGET = $(BUILD_DIR)/main.com
+OUT = build
+TARGET = $(OUT)/main.com
 
 # Flags
 CFLAGS = -Os -mtiny -mclang -DTINY -D_COSMO_SOURCE -I. -v
-#CFLAGS = -Os -mtiny -mzig -DTINY -D_COSMO_SOURCE -I. -v
 
 SRCS = main.c
-OBJS = $(addprefix $(BUILD_DIR)/,$(SRCS:.c=.o))
+OBJS = $(addprefix $(OUT)/,$(SRCS:.c=.o))
 
-.PHONY: all clean
-
+.PHONY: all
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -o $@ $(OBJS)
 
-$(BUILD_DIR)/%.o: %.c
+$(OUT)/%.o: %.c
 	@$(MKDIR) -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+.PHONY: clean
 clean:
-	$(RM) -rf $(BUILD_DIR)
+	$(RM) -rf $(OUT)
