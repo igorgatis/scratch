@@ -31,3 +31,6 @@ $(TARGET): $(OBJS)
 .PHONY: clean
 clean:
 	$(RM) -rf $(OUT)
+
+.PHONY: rebuild
+rebuild: clean all

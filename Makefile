@@ -31,8 +31,8 @@ $(OUT)/%.o: %.zig
 	@$(MKDIR) -p $(dir $@)/.aarch64
 	$(ZIG) build-obj $(ZIGFLAGS_X86_64) -femit-bin=$@ $<
 	$(FIXUPOBJ) $@
-	$(ZIG) build-obj $(ZIGFLAGS_AARCH64) -femit-bin=$(dir $@)/.aarch64/$(notdir $@) $<
-	$(FIXUPOBJ) $(dir $@)/.aarch64/$(notdir $@)
+	$(ZIG) build-obj $(ZIGFLAGS_AARCH64) -femit-bin=$(dir $@).aarch64/$(notdir $@) $<
+	$(FIXUPOBJ) $(dir $@).aarch64/$(notdir $@)
 
 $(TARGET): $(OBJS)
 	@$(MKDIR) -p $(dir $@)
@@ -41,3 +41,6 @@ $(TARGET): $(OBJS)
 .PHONY: clean
 clean:
 	$(RM) -rf $(OUT)
+
+.PHONY: rebuild
+rebuild: clean all
