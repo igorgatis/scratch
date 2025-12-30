@@ -1,0 +1,6 @@
+[tools]
+"http:cosmocc" = { version = "4.0.2", url = "https://github.com/jart/cosmopolitan/releases/download/{{version}}/cosmocc-{{version}}.zip" }
+"http:cosmos-curl" = { version = "4.0.2", url = "https://cosmo.zip/pub/cosmos/v/{{version}}/bin/curl" }
+"http:cosmos-find" = { version = "4.0.2", url = "https://cosmo.zip/pub/cosmos/v/{{version}}/bin/find" }
+"http:cosmos-zip" = { version = "4.0.2", url = "https://cosmo.zip/pub/cosmos/v/{{version}}/bin/zip" }
+zig = "0.15.2"
