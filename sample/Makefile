@@ -20,13 +20,13 @@ OBJS = $(addprefix $(OUT)/,$(SRCS:.c=.o))
 .PHONY: all
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	@$(MKDIR) -p $(dir $@)
-	$(CC) $(CFLAGS) -o $@ $(OBJS)
-
 $(OUT)/%.o: %.c
 	@$(MKDIR) -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -o $@ -c $<
+
+$(TARGET): $(OBJS)
+	@$(MKDIR) -p $(dir $@)
+	$(CC) $(CFLAGS) -o $@ $<
 
 .PHONY: clean
 clean:
